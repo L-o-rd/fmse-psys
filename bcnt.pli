@@ -1,0 +1,17 @@
+@model <transition>
+
+/*
+ * Binary Counter
+ */
+
+def main() {
+    @mu = []'1;
+    let bits = 5;
+    call setup(bits);
+}
+
+def setup(n) {
+    @ms(1) = b{0};
+    [b{k} --> b{k + 1}]'1 : 0 <= k < 2 ^ n - 1;
+    [b{2 ^ n - 1} --> b{0}]'1;
+}
