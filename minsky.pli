@@ -1,0 +1,157 @@
+/**
+ *  Specifies the Active Membranes model.
+ *  <If it is not already available.>
+ */
+
+!dam_evolution {
+   ?[a -> v]'h;
+   ?[a ->  ]'h;
+}
+
+!dam_send_in {
+   a ?[ ]'h -> ?[b]'h;
+}
+
+!dam_send_out {
+   ?[a]'h -> b ?[ ]'h;
+}
+
+!dam_dissolution {
+   ?[a]'h -> b;
+   ?[a]'h ->  ;
+}
+
+!dam_division {
+   ?[a]'h -> ?[ ]'h ?[ ]'h;
+   ?[a]'h -> ?[b]'h ?[ ]'h;
+   ?[a]'h -> ?[ ]'h ?[b]'h;
+   ?[a]'h -> ?[b]'h ?[c]'h;
+}
+
+@model(membrane_division) =
+       dam_evolution, @1{dam_send_in, dam_send_out, dam_dissolution, dam_division};
+
+@model <membrane_division>
+
+/**
+ *  Sets up a Minsky Machine
+ *      that works with:
+ *      @`n` registers
+ */
+
+def minsky(n) {
+    @mu = []'0;
+    /* Add register membranes. */
+    @mu(0) += []'{i} : 1 <= i <= n;
+    /* Add `waiting` membrane. */
+    @mu(0) += []'z;
+}
+
+/**
+ *  Inserts the instruction
+ *      inc(r), j at label i.
+ */
+
+def inc(i, r, j) {
+    /* Counter enters `r` membrane. */  p{i}[]'{r} --> [pp{i}]'{r};
+    /* Increment (unary). */            [pp{i} --> a, ppp{i}]'{r};
+    /* Finalize instruction. */         [ppp{i}]'{r} --> p{j}[]'{r};
+}
+
+/**
+ *  Inserts the instruction
+ *      dec(r), j, k at label i.
+ */
+
+def dec(i, r, j, k) {
+    /* Counter enters `r` membrane. */  p{i}[]'{r} --> -[pp{i}]'{r};
+    /* Decrement if not at minimum. */  -[a]'{r} --> a[]'{r};
+    /* Send counter to wait. (1.1)  */  [pp{i}]'{r} --> pp{i}[]'{r};
+    /* Send counter to wait. (1.2)  */  -[pp{i}]'{r} --> pp{i} -[]'{r};
+    /* Send counter to wait.   (2)  */  pp{i} []'z --> [pp{i}]'z;
+    /* Send counter to wait.   (3)  */  [pp{i}]'z --> ppp{i} []'z;
+    /* Send counter to wait. (4.1)  */  ppp{i} []'{r} --> [ppp{i}]'{r};
+    /* Send counter to wait. (4.2)  */  ppp{i} -[]'{r} --> -[ppp{i}]'{r};
+    /* Decide if it was successful. */  [ppp{i}]'{r} --> p{j} []'{r};
+    /* Decide if it was successful. */  -[ppp{i}]'{r} --> p{k} []'{r};
+}
+
+/**
+ *  <Extras>
+ */
+
+/**
+ *  Inserts the instruction
+ *      shr(k, r), j at label i.
+ */
+
+def shr(i, k, r, j) {
+    /* i0: dec(k), i0, i1 */ call dec(i, k, i, i + 1);
+    /* i1: dec(r), i2, j */  call dec(i + 1, r, i + 2, j);
+    /* i2: dec(r), i3, j */  call dec(i + 2, r, i + 3, j);
+    /* i3: inc(k), i1 */     call inc(i + 3, k, i + 1);
+}
+
+/**
+ *  Inserts the instruction
+ *      prt(r), j, k at label i.
+ */
+
+def prt(i, r, j, k) {
+    /* i0: dec(r), i1, j */ call dec(i + 0, r, i + 1, j);
+    /* i1: dec(r), i0, k */ call dec(i + 1, r, i + 0, k);
+}
+
+/**
+ *  Inserts the instruction
+ *      mov(j, k), l at label i.
+ *      <destroys $k>.
+ */
+
+def mov(i, j, k, l) {
+    /* i0: dec(j), i0, i1 */ call dec(i, j, i, i + 1);
+    /* i1: dec(k), i2, l  */ call dec(i + 1, k, i + 2, l);
+    /* i2: inc(j), i1     */ call inc(i + 2, j, i + 1);
+}
+
+/**
+ *  <Programs>
+ */
+
+/**
+ *  $1 = n
+ *  0: dec $3, 0, 1         ($3 =  0)
+ *  1: dec $1, 2, 15        ($1 >  0)
+ *  2: inc $1, 3            ($1 +  1)
+ *  3: dec $2, 3, 4         ($2 =  0)
+ *  4: dec $4, 4, 5         ($4 =  0)
+ *  5: dec $1, 6, 8         ($1 =  0)
+ *  6: inc $2, 7            ($2 = $1)
+ *  7: inc $4, 5            ($4 = $1)
+ *  8: prt $2, 11, 10       (n  &  1)
+ * 10: inc $3, 11           ($3 += 1)
+ * 11: shr $1, $4, 1        ($1  / 2)
+ * 15: halt
+ */
+
+def popcnt(n) {
+    /* $1 = n */ @ms(1) = a * n;
+    call dec(0, 3, 0, 1);
+    call dec(1, 1, 2, 15);
+    call inc(2, 1, 3);
+    call dec(3, 2, 3, 4);
+    call dec(4, 4, 4, 5);
+    call dec(5, 1, 6, 8);
+    call inc(6, 2, 7);
+    call inc(7, 4, 5);
+    call prt(8, 2, 11, 10);
+    call inc(10, 3, 11);
+    call shr(11, 1, 4, 1);
+    /* 15: halt */
+}
+
+def main() {
+    /* Setup Minsky machine.  */ call minsky(4);
+    /* Reset program counter. */ @ms(0) = p{0};
+    call popcnt(231); /* 1110 0111 */
+}
